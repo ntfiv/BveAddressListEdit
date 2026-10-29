@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>BveAddressListEdit</AssemblyName>
+    <RootNamespace>BveAddressListEdit</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>1.0.0</Version>
+    <Product>BVE AddressList Edit</Product>
+    <Description>BVE5 / BVE6 のシナリオフォルダ履歴を整理するツール</Description>
+    <Authors>NT/fiv</Authors>
+    <Company>かんたんのゆめ</Company>
+    <Copyright>Copyright (c) 2026 NT/fiv</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System.Xml.Linq" />
+  </ItemGroup>
+
+</Project>
