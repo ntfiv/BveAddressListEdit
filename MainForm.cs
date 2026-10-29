@@ -13,7 +13,9 @@ namespace BveAddressListEdit
         private static readonly string AppTitle =
             "BVE AddressList Edit v" + typeof(MainForm).Assembly.GetName().Version.ToString(3);
 
-        private readonly string settingsDir;
+        /// <summary>起動時の引数で指定された設定フォルダ（テスト用）。null なら通常どおり。</summary>
+        private readonly string overrideDir;
+        private readonly Dictionary<BveVersion, string> paths = new Dictionary<BveVersion, string>();
 
         private readonly RadioButton rbBve5;
         private readonly RadioButton rbBve6;
@@ -34,9 +36,10 @@ namespace BveAddressListEdit
         /// <summary>リスト内ドラッグ用のデータ型</summary>
         private sealed class RowDrag { public List<int> Indices; }
 
-        public MainForm(string settingsDir)
+        public MainForm(string overrideDir)
         {
-            this.settingsDir = settingsDir;
+            this.overrideDir = overrideDir;
+            ResolvePaths();
 
             Font = new Font("Yu Gothic UI", 9f);
             Text = AppTitle;
@@ -56,10 +59,23 @@ namespace BveAddressListEdit
             versionRow.Controls.Add(new Label { Text = "対象:", AutoSize = true, Margin = new Padding(0, 6, 8, 3) });
             versionRow.Controls.Add(rbBve5);
             versionRow.Controls.Add(rbBve6);
+            var btnFind = new Button
+            {
+                Text = "設定ファイルを探す...",
+                AutoSize = true,
+                Margin = new Padding(Px(8), 0, 0, 0),
+                UseVisualStyleBackColor = true,
+            };
+            btnFind.Click += (s, e) => FindSettings();
+            toolTip.SetToolTip(btnFind, "PC 内から BVE の設定ファイル（Preferences.xml / BveTs6.Preferences.xml）を探します");
+            versionRow.Controls.Add(btnFind);
 
             lblPath = new LinkLabel { AutoSize = true, Margin = new Padding(0, 2, 0, 6), AutoEllipsis = true };
-            lblPath.LinkClicked += (s, e) => OpenInExplorer(currentPath, select: true);
-            toolTip.SetToolTip(lblPath, "クリックでエクスプローラーに表示");
+            lblPath.LinkClicked += (s, e) =>
+            {
+                if (currentPath != null) OpenInExplorer(currentPath, select: true);
+                else FindSettings();
+            };
 
             // ---- 中央：リスト ----
             list = new ListView
@@ -157,9 +173,30 @@ namespace BveAddressListEdit
         //  読み込み・保存
         // ================================================================
 
-        private string PathOf(BveVersion v) => Path.Combine(settingsDir, PreferencesFile.FileName(v));
+        private string PathOf(BveVersion v) => paths[v];
 
-        private void InitVersionSelection()
+        /// <summary>
+        /// 使う設定ファイルを決める。検索で選んだ場所を覚えていればそれを、
+        /// なければ ドキュメント\BveTs\Settings を使う。
+        /// </summary>
+        private void ResolvePaths()
+        {
+            foreach (BveVersion v in new[] { BveVersion.Bve5, BveVersion.Bve6 })
+            {
+                string name = PreferencesFile.FileName(v);
+                if (overrideDir != null)
+                {
+                    paths[v] = Path.Combine(overrideDir, name);
+                    continue;
+                }
+                string remembered = PathMemory.Get(v);
+                paths[v] = !string.IsNullOrEmpty(remembered) && File.Exists(remembered)
+                    ? remembered
+                    : Path.Combine(PreferencesFile.DefaultSettingsDir, name);
+            }
+        }
+
+        private void UpdateVersionRadios()
         {
             bool has5 = File.Exists(PathOf(BveVersion.Bve5));
             bool has6 = File.Exists(PathOf(BveVersion.Bve6));
@@ -167,10 +204,16 @@ namespace BveAddressListEdit
             rbBve6.Text = has6 ? "BVE6" : "BVE6（設定ファイルなし）";
             rbBve5.Enabled = has5;
             rbBve6.Enabled = has6;
+        }
+
+        private void InitVersionSelection()
+        {
+            UpdateVersionRadios();
+            bool has5 = rbBve5.Enabled, has6 = rbBve6.Enabled;
 
             if (!has5 && !has6)
             {
-                lblPath.Text = "設定ファイルが見つかりません: " + settingsDir;
+                lblPath.Text = "設定ファイルが見つかりません（クリックするか「設定ファイルを探す...」で PC 内から探せます）";
                 currentPath = null;
                 RefreshList();
                 return;
@@ -180,10 +223,55 @@ namespace BveAddressListEdit
             else rbBve5.Checked = true;
         }
 
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            if (currentPath != null) return;
+            var r = MessageBox.Show(this,
+                "BVE の設定ファイルが、いつもの場所（ドキュメント\\BveTs\\Settings）に見つかりませんでした。\r\n\r\n" +
+                "PC 内から探しますか？",
+                AppTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (r == DialogResult.Yes) FindSettings();
+        }
+
+        /// <summary>PC 内から設定ファイルを探し、選ばれたものを開いて場所を覚える。</summary>
+        private void FindSettings()
+        {
+            FoundFile f;
+            using (var dlg = new SearchForm(Font, paths.Values.Where(File.Exists)))
+            {
+                if (dlg.ShowDialog(this) != DialogResult.OK || dlg.Selected == null) return;
+                f = dlg.Selected;
+            }
+            if (string.Equals(f.Path, currentPath, StringComparison.OrdinalIgnoreCase))
+            {
+                status.Text = "このファイルは既に開いています";
+                return;
+            }
+            if (!ConfirmDiscard()) return;
+
+            paths[f.Version] = f.Path;
+            if (overrideDir == null) PathMemory.Set(f.Version, f.Path);
+            UpdateVersionRadios();
+
+            switchingVersion = true;
+            (f.Version == BveVersion.Bve5 ? rbBve5 : rbBve6).Checked = true;
+            switchingVersion = false;
+
+            version = f.Version;
+            currentPath = f.Path;
+            lblPath.Text = currentPath;
+            toolTip.SetToolTip(lblPath, "クリックでエクスプローラーに表示");
+            LoadFile(currentPath);
+            status.Text = overrideDir == null
+                ? "この設定ファイルを開きました。次回からもこの場所を使います"
+                : "この設定ファイルを開きました";
+        }
+
         private void SwitchVersion(BveVersion v)
         {
             if (switchingVersion) return;
-            if (currentPath != null && v == version) return;
+            if (currentPath != null && string.Equals(PathOf(v), currentPath, StringComparison.OrdinalIgnoreCase)) return;
 
             if (currentPath != null && !ConfirmDiscard())
             {
@@ -197,6 +285,7 @@ namespace BveAddressListEdit
             version = v;
             currentPath = PathOf(v);
             lblPath.Text = currentPath;
+            toolTip.SetToolTip(lblPath, "クリックでエクスプローラーに表示");
             LoadFile(currentPath);
         }
 

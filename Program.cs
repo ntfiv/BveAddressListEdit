@@ -14,8 +14,7 @@ namespace BveAddressListEdit
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            string settingsDir = args.Length > 0 ? args[0] : PreferencesFile.DefaultSettingsDir;
-            Application.Run(new MainForm(settingsDir));
+            Application.Run(new MainForm(args.Length > 0 ? args[0] : null));
         }
     }
 }

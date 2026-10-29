@@ -27,6 +27,36 @@ namespace BveAddressListEdit
         public static string FileName(BveVersion version) =>
             version == BveVersion.Bve5 ? "Preferences.xml" : "BveTs6.Preferences.xml";
 
+        /// <summary>
+        /// ファイル名と中身から BVE の設定ファイルかどうかを判定します
+        /// （Preferences.xml はほかのソフトでも使われる名前なので中身も確認する）。
+        /// </summary>
+        public static bool TryInspect(string path, out BveVersion version, out int count)
+        {
+            version = BveVersion.Bve5;
+            count = 0;
+            string name = Path.GetFileName(path);
+            if (string.Equals(name, FileName(BveVersion.Bve6), StringComparison.OrdinalIgnoreCase))
+                version = BveVersion.Bve6;
+            else if (!string.Equals(name, FileName(BveVersion.Bve5), StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            try
+            {
+                if (new FileInfo(path).Length > 4 * 1024 * 1024) return false;
+                XElement root = XDocument.Load(path).Root;
+                if (root == null || root.Name.LocalName != "Preferences") return false;
+                XElement form = root.Element("ScenarioForm");
+                if (form == null && root.Element("KeyAssignment") == null) return false;
+                count = form?.Element("Address")?.Elements("string").Count() ?? 0;
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
         public static List<string> ReadAddresses(string path)
         {
             XDocument doc = XDocument.Load(path, LoadOptions.PreserveWhitespace);
