@@ -46,4 +46,4 @@ BVE Trainsim 5 / 6 のシナリオ選択画面に出るフォルダの履歴を�
   X: @BVE69345936 ／ @ntfiv
   https://kantanbay.jp/
   https://kty-bvememo.hatenablog.jp/
-  https://github.com/__REPO__
+  https://github.com/ntfiv
